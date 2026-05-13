@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Staging overlay for Knative inference — GPU mode with one warm pod.
+# minScale: 1 keeps a pod Running so first requests don't hit GPU cold-start.
+# This lets staging measure steady-state latency, not just cold-start.
+
+resources:
+  - ../../../apps/knative-inference
+
+images:
+  - name: REGISTRY_PLACEHOLDER/inference-stub
+    newName: YOUR_AWS_ACCOUNT_ID.dkr.ecr.YOUR_AWS_REGION.amazonaws.com/inference-stub
+    newTag: latest
+
+patches:
+  - target:
+      kind: Service
+      name: inference-kn
+    patch: |
+      - op: replace
+        path: /metadata/annotations/autoscaling.knative.dev~1minScale
+        value: "1"
+      - op: replace
+        path: /metadata/annotations/autoscaling.knative.dev~1maxScale
+        value: "10"
+      - op: replace
+        path: /metadata/annotations/autoscaling.knative.dev~1scaleDownDelay
+        value: "10m"

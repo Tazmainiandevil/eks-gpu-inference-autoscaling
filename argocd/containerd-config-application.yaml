@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: containerd-config
+  namespace: argocd
+  annotations:
+    # Wave 1: after dragonfly Helm app has started creating its namespace and pods.
+    # containerd-config-daemonset.yaml configures the containerd mirror to Dragonfly's
+    # local proxy (127.0.0.1:4001). The namespace must exist before this can apply.
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/YOUR_ORG/eks-gpu-inference-autoscaling
+    targetRevision: main
+    # path must be a directory — the kustomization.yaml here references the DaemonSet.
+    path: platform/dragonfly/containerd-config
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dragonfly-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

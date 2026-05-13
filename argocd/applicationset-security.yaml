@@ -1,0 +1,44 @@
+---
+# ApplicationSet for Kubernetes baseline hardening manifests (namespaces + policy + infra config)
+#
+# Wave 0 (object-level): applied first by the root Application so that namespaces
+# are created with correct Pod Security Standards labels before platform operators
+# and app workloads try to create them via CreateNamespace=true.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: security-infra
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  goTemplate: true
+  generators:
+  - list:
+      elements:
+      - name: k8s-policy-baseline
+        namespace: default
+        path: k8s
+        syncWave: "0"
+  template:
+    metadata:
+      name: "{{.name}}"
+      annotations:
+        argocd.argoproj.io/sync-wave: "{{.syncWave}}"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/YOUR_ORG/eks-gpu-inference-autoscaling
+        targetRevision: main
+        path: "{{.path}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{.namespace}}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        - PrunePropagationPolicy=foreground
+        - PruneLast=true

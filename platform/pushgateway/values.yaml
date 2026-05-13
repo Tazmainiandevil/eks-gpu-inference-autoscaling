@@ -1,0 +1,46 @@
+# Prometheus Pushgateway — receives gpu_job_queue_depth metrics from load tests
+# and any application component that cannot be scraped directly (batch jobs, scripts)
+replicaCount: 1
+
+image:
+  repository: prom/pushgateway
+  tag: v1.9.0
+
+service:
+  type: ClusterIP
+  port: 9091
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+# Let kube-prometheus-stack scrape Pushgateway automatically
+serviceMonitor:
+  enabled: true
+  namespace: monitoring
+  interval: 15s
+  additionalLabels:
+    release: prometheus  # matches kube-prometheus-stack serviceMonitorSelector
+
+persistentVolume:
+  enabled: false  # stateless is fine for load testing
+
+# Honour label grouping sent by push clients
+persistLabelGrouping: true
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+  seccompProfile:
+    type: RuntimeDefault

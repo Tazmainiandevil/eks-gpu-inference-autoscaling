@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - 00-namespaces.yaml
+  - 01-resourcequotas.yaml
+  - 08-limitranges.yaml
+  - 03-network-policies.yaml
+  - 04-priorityclasses.yaml
+  - 05-storageclass.yaml
+  # 02-poddisruptionbudget.yaml — removed; PDB is defined in apps/inference/deployment.yaml
+  # 05-external-secrets.md — docs only, Kustomize cannot parse Markdown as a resource
+  # 06-vpa.yaml — requires VPA operator CRDs; install VPA separately before enabling
+  # 07-ingress.yaml — requires nginx-ingress + cert-manager; install those before enabling

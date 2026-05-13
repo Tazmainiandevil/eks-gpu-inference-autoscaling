@@ -1,0 +1,23 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-pdb-for-gpu-pods
+spec:
+  validationFailureAction: audit
+  rules:
+    - name: check-pdb-label-present
+      match:
+        resources:
+          kinds:
+            - Pod
+          namespaces:
+            - inference
+      validate:
+        message: >-
+          GPU pods must carry the app label so a PodDisruptionBudget can select them.
+          This prevents Karpenter node consolidation from evicting all pods simultaneously.
+          Ensure the pod template has: labels.app set to a value that a PDB matchLabels targets.
+        pattern:
+          metadata:
+            labels:
+              app: "?*"

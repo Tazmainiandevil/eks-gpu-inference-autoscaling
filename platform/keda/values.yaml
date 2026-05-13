@@ -1,0 +1,46 @@
+---
+# KEDA Helm values for pod autoscaling
+# Reference: https://keda.sh/docs/
+replicaCount: 1
+
+serviceAccount:
+  create: true
+  name: keda-operator
+
+podSecurityPolicy:
+  create: false
+
+# Pin KEDA operator and metrics server to system nodes.
+# If KEDA is evicted, ScaledObjects stop triggering — keeping it on the
+# dedicated system node group prevents noisy-neighbour evictions.
+tolerations:
+  - key: system
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+
+affinity:
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: role
+              operator: In
+              values: [system]
+
+metricsServer:
+  tolerations:
+    - key: system
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          preference:
+            matchExpressions:
+              - key: role
+                operator: In
+                values: [system]

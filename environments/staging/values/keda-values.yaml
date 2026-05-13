@@ -1,0 +1,2 @@
+# Staging environment overrides for KEDA
+replicaCount: 1

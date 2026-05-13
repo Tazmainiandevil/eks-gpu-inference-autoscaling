@@ -1,0 +1,104 @@
+---
+# ApplicationSet for Kustomize-based platform components
+#
+# Wave 0 — base platform manifests (no CRD dependencies):
+#   knative-serving   Knative CRDs + core serving components (no official Helm chart)
+#   prometheus-config PrometheusRule alerts + Grafana dashboard ConfigMaps
+#
+# Wave 1 — CRD-dependent configs (must run after wave-0 operators are healthy):
+#   karpenter-config      NodePool + EC2NodeClass (require Karpenter CRDs from wave-0 chart)
+#   kyverno-policies      ClusterPolicy resources (require Kyverno CRDs from wave-0 chart)
+#   cluster-secret-store  ClusterSecretStore → AWS Secrets Manager (requires ESO CRDs)
+#   monitoring-secrets    ExternalSecrets for Grafana admin (requires ClusterSecretStore)
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform-kustomize
+  namespace: argocd
+  annotations:
+    # Wave 1: alongside platform-helm. Generated Applications use their own waves
+    # (knative-serving/prometheus-config at 0, karpenter-config/kyverno-policies at 1)
+    # enforced by retry within the platform-kustomize ApplicationSet.
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  goTemplate: true
+  generators:
+  - list:
+      elements:
+      - name: knative-serving
+        namespace: knative-serving
+        path: platform/knative-serving
+        syncWave: "0"
+      - name: kourier
+        namespace: kourier-system
+        path: platform/kourier
+        syncWave: "0"
+      - name: prometheus-config
+        namespace: monitoring
+        path: platform/prometheus
+        syncWave: "0"
+      # Use the environment-specific overlay, not the base path, so that the
+      # EC2NodeClass role/selectors and NodePool consolidateAfter match the cluster:
+      #   dev:        environments/dev/karpenter
+      #   staging:    environments/staging/karpenter
+      #   production: environments/production/karpenter
+      - name: karpenter-config
+        namespace: karpenter
+        path: environments/dev/karpenter
+        syncWave: "1"
+      - name: kyverno-policies
+        namespace: kyverno
+        path: platform/kyverno
+        syncWave: "1"
+      # cluster-secret-store depends on ESO CRDs (installed by platform-helm wave 0).
+      # Retry handles the timing gap — ClusterSecretStore will fail until the CRD exists.
+      - name: cluster-secret-store
+        namespace: external-secrets
+        path: platform/external-secrets
+        syncWave: "1"
+      # monitoring-secrets depends on cluster-secret-store being Ready and the
+      # Secrets Manager secret existing (created by setup.sh before ArgoCD bootstrap).
+      - name: monitoring-secrets
+        namespace: monitoring
+        path: platform/monitoring-secrets
+        syncWave: "1"
+  template:
+    metadata:
+      name: "{{.name}}"
+      annotations:
+        argocd.argoproj.io/sync-wave: "{{.syncWave}}"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/YOUR_ORG/eks-gpu-inference-autoscaling
+        targetRevision: main
+        path: "{{.path}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{.namespace}}"
+      ignoreDifferences:
+      # Knative webhooks: the serving webhook reconciler rewrites the entire webhooks
+      # array at startup — injecting caBundle, service path/port, and reformatting
+      # rules from a combined entry to per-resource entries. Ignore the whole array.
+      - group: admissionregistration.k8s.io
+        kind: MutatingWebhookConfiguration
+        jqPathExpressions:
+        - .webhooks
+      - group: admissionregistration.k8s.io
+        kind: ValidatingWebhookConfiguration
+        jqPathExpressions:
+        - .webhooks
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        - PrunePropagationPolicy=foreground
+        - PruneLast=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 3m

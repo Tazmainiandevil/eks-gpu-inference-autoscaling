@@ -1,0 +1,41 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Staging overlay for Karpenter NodePool and EC2NodeClass.
+# Patches cluster-specific values to match staging.tfvars (cluster_name = YOUR_CLUSTER_NAME-staging).
+# consolidateAfter: 30m — hold warm GPU nodes for 30 min after traffic drops.
+
+resources:
+  - ../../../platform/karpenter
+
+patches:
+  # EC2NodeClass: set the node IAM role and discovery selectors for this cluster.
+  - patch: |-
+      apiVersion: karpenter.k8s.aws/v1
+      kind: EC2NodeClass
+      metadata:
+        name: default
+      spec:
+        role: "YOUR_CLUSTER_NAME-staging-gpu-node-role"
+        subnetSelectorTerms:
+          - tags:
+              karpenter.sh/discovery: YOUR_CLUSTER_NAME-staging
+        securityGroupSelectorTerms:
+          - tags:
+              kubernetes.io/cluster/YOUR_CLUSTER_NAME-staging: owned
+
+  # NodePools: 30-minute consolidation window (balance cost vs. cold-start latency).
+  - patch: |-
+      - op: replace
+        path: /spec/disruption/consolidateAfter
+        value: 30m
+    target:
+      kind: NodePool
+      name: gpu
+  - patch: |-
+      - op: replace
+        path: /spec/disruption/consolidateAfter
+        value: 30m
+    target:
+      kind: NodePool
+      name: general

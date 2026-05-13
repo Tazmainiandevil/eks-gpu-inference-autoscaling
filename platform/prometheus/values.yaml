@@ -1,0 +1,110 @@
+---
+# Prometheus Stack Helm values for GPU workload monitoring
+# Reference: https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
+#
+# Placement: all monitoring components are pinned to system nodes.
+# System nodes carry the system=true:NoSchedule taint, so tolerations are required.
+# Soft affinity (preferred) is used — if a system node is unavailable, scheduling
+# falls through to app nodes rather than blocking the pod indefinitely.
+
+# Shared affinity and toleration blocks referenced throughout this file.
+# Each component section sets these directly (Helm does not support YAML anchors).
+
+prometheus:
+  prometheusSpec:
+    retention: 7d  # Override in production
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp2
+          resources:
+            requests:
+              storage: 10Gi
+    remoteWrite: []  # Add remote storage in production
+
+    # Resource limits prevent Prometheus from balloon-allocating all node RAM.
+    # Prometheus can spike to 1–2 GB under heavy scrape load; 1.5 GB limit
+    # fits comfortably on a t3.large (8 GB) system node.
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1
+        memory: 1500Mi
+
+    tolerations:
+      - key: system
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+                - key: role
+                  operator: In
+                  values: [system]
+
+grafana:
+  enabled: true
+  defaultDashboardsEnabled: true
+  defaultDashboardsTimezone: utc
+  adminPassword: "admin"  # Change in production via secrets
+
+  tolerations:
+    - key: system
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          preference:
+            matchExpressions:
+              - key: role
+                operator: In
+                values: [system]
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    tolerations:
+      - key: system
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+                - key: role
+                  operator: In
+                  values: [system]
+  config:
+    route:
+      group_by: ['alertname']
+      receiver: 'default'
+    receivers:
+    - name: 'default'
+
+prometheusOperator:
+  tolerations:
+    - key: system
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          preference:
+            matchExpressions:
+              - key: role
+                operator: In
+                values: [system]

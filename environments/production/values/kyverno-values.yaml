@@ -1,0 +1,4 @@
+# Production environment - Kyverno enforce mode (hard block violations)
+config:
+  validationFailureAction: enforce
+replicaCount: 2  # HA in production

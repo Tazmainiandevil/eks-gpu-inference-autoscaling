@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Kourier is the recommended lightweight ingress for Knative Serving.
+# Installs into kourier-system namespace. Version must match net-kourier
+# release for the installed Knative Serving version (1.21.x).
+resources:
+  - https://github.com/knative/net-kourier/releases/download/knative-v1.21.0/kourier.yaml
+
+patches:
+  - path: patch-service-nodeport.yaml
+    target:
+      kind: Service
+      name: kourier
+      namespace: kourier-system
+
+labels:
+  - pairs:
+      app.kubernetes.io/managed-by: argocd
+    includeSelectors: false

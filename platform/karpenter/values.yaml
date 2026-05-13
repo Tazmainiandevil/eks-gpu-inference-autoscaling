@@ -1,0 +1,31 @@
+---
+# Karpenter Helm values for GPU inference node provisioning
+# Reference: https://karpenter.sh/docs/
+replicaCount: 1
+
+settings:
+  # clusterName and interruptionQueue are set per-environment in
+  # environments/*/values/karpenter-values.yaml — must match Terraform cluster_name.
+  featureGates:
+    spotToSpotConsolidation: false
+    reservedCapacity: false
+    nodeRepair: false
+
+# No serviceAccount.annotations needed — IAM is wired via EKS Pod Identity
+# (aws_eks_pod_identity_association in Terraform), not IRSA.
+
+tolerations:
+- key: system
+  operator: Equal
+  value: "true"
+  effect: NoSchedule
+
+affinity:
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: role
+              operator: In
+              values: [system]

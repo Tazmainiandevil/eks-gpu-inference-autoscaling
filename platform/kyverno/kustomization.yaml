@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Kyverno policies only. The kyverno chart itself is deployed by the Helm
+# ApplicationSet (argocd/applicationset-platform-helm.yaml) at wave 0.
+# This kustomization runs at wave 1 so the Kyverno CRDs exist before these
+# ClusterPolicy resources are applied.
+namespace: kyverno
+
+resources:
+  - policies/require-gpu-request.yaml
+  - policies/require-gpu-toleration.yaml
+  - policies/require-pdb-for-gpu-pods.yaml

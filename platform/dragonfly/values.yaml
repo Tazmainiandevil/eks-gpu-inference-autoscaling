@@ -1,0 +1,48 @@
+manager:
+  replicas: 1
+  metrics:
+    enable: true
+scheduler:
+  replicas: 1
+  metrics:
+    enable: true
+redis:
+  master:
+    persistence:
+      storageClass: gp2
+  replica:
+    persistence:
+      storageClass: gp2
+mysql:
+  primary:
+    persistence:
+      storageClass: gp2
+seedClient:
+  replicas: 1
+  persistence:
+    storageClass: gp2
+  metrics:
+    enable: true
+  config:
+    proxy:
+      registryMirror:
+        # Set to your ECR registry: <account-id>.dkr.ecr.<region>.amazonaws.com
+        # Set by scripts/setup.sh — run it before applying.
+        addr: "https://ECR_REGISTRY_PLACEHOLDER"
+client:
+  metrics:
+    enable: true
+  config:
+    proxy:
+      registryMirror:
+        addr: "https://ECR_REGISTRY_PLACEHOLDER"
+  dfinit:
+    enable: true
+    config:
+      containerRuntime:
+        containerd:
+          configPath: /etc/containerd/config.toml
+          registries:
+            - hostNamespace: "ECR_REGISTRY_PLACEHOLDER"
+              serverAddr: "https://ECR_REGISTRY_PLACEHOLDER"
+              capabilities: ["pull", "resolve"]

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kourier
+  namespace: kourier-system
+spec:
+  # Change from LoadBalancer to NodePort — avoids ELB provisioning.
+  # Cluster-local KService traffic uses kourier-internal (ClusterIP) which
+  # is unaffected. External access to Knative services is not required for
+  # this demo; use port-forward if needed.
+  type: NodePort

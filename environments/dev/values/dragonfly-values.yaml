@@ -1,0 +1,29 @@
+# Dev overrides for Dragonfly — single replicas to stay within pod budget on t3.medium nodes.
+redis:
+  replica:
+    replicaCount: 1
+
+mysql:
+  secondary:
+    replicaCount: 0
+
+# ECR registry for this AWS account/region — set by scripts/setup.sh.
+seedClient:
+  config:
+    proxy:
+      registryMirror:
+        addr: "https://ECR_REGISTRY_PLACEHOLDER"
+
+client:
+  config:
+    proxy:
+      registryMirror:
+        addr: "https://ECR_REGISTRY_PLACEHOLDER"
+  dfinit:
+    config:
+      containerRuntime:
+        containerd:
+          registries:
+            - hostNamespace: "ECR_REGISTRY_PLACEHOLDER"
+              serverAddr: "https://ECR_REGISTRY_PLACEHOLDER"
+              capabilities: ["pull", "resolve"]

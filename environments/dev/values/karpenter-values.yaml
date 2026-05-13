@@ -1,0 +1,11 @@
+# Development environment overrides for Karpenter
+# - Single replica, fast consolidation (dev cost optimization)
+# - Spot instances only
+# - No baseline GPU nodes (scale to zero)
+replicaCount: 1
+
+settings:
+  clusterName: YOUR_CLUSTER_NAME
+  # IAM wired via EKS Pod Identity — no serviceAccount annotation needed.
+  # Queue name matches aws_sqs_queue.karpenter_interruption in Terraform: {cluster_name}-spot-interruption
+  interruptionQueue: YOUR_CLUSTER_NAME-spot-interruption

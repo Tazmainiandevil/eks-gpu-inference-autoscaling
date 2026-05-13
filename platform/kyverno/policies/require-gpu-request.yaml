@@ -1,0 +1,24 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-gpu-request
+spec:
+  validationFailureAction: audit
+  rules:
+    - name: check-gpu-request
+      match:
+        resources:
+          kinds:
+            - Pod
+          namespaces:
+            - inference
+      validate:
+        message: >-
+          GPU pods must explicitly request nvidia.com/gpu.
+          Add to pod spec: resources.limits.nvidia.com/gpu: "1"
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  limits:
+                    nvidia.com/gpu: "?*"

@@ -1,0 +1,93 @@
+# Kyverno: Policy Engine for Kubernetes
+# Enforces GPU pod safety policies at admission time
+# Validates: GPU requests, taint tolerations, Pod Disruption Budgets
+
+admissionController:
+  tolerations:
+  - key: system
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      preference:
+        matchExpressions:
+        - key: role
+          operator: In
+          values: [system]
+
+backgroundController:
+  tolerations:
+  - key: system
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      preference:
+        matchExpressions:
+        - key: role
+          operator: In
+          values: [system]
+
+cleanupController:
+  tolerations:
+  - key: system
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      preference:
+        matchExpressions:
+        - key: role
+          operator: In
+          values: [system]
+
+reportsController:
+  tolerations:
+  - key: system
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      preference:
+        matchExpressions:
+        - key: role
+          operator: In
+          values: [system]
+
+config:
+  # Start with audit (log violations) before switching to enforce
+  validationFailureAction: audit
+
+resources:
+  limits:
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+webhooks:
+  validation:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kyverno
+            - kube-system
+            - kube-public
+            - kube-node-lease
+
+# CRDs installed by ArgoCD using ServerSideApply=true (set in applicationset-platform-helm.yaml).
+# SSA avoids the 262KB last-applied-configuration annotation limit that affects the large
+# clusterpolicies and policies CRDs. ignoreDifferences on those two CRDs prevents constant
+# OutOfSync due to kube-apiserver defaulting spec.conversion.strategy after creation.
+crds:
+  install: true

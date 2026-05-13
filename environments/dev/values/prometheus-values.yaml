@@ -1,0 +1,21 @@
+# Development environment overrides for Prometheus
+# Short retention, minimal storage for cost
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          resources:
+            requests:
+              storage: 10Gi
+
+grafana:
+  enabled: true
+  admin:
+    # Password is injected from AWS Secrets Manager via External Secrets Operator.
+    # setup.sh creates the secret at <cluster-name>/grafana-admin before ArgoCD bootstraps.
+    # ESO syncs it into a Kubernetes Secret named 'grafana-admin' in the monitoring namespace.
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password

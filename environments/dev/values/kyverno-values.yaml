@@ -1,0 +1,3 @@
+# Dev environment - Kyverno audit mode (log violations, don't block)
+config:
+  validationFailureAction: audit

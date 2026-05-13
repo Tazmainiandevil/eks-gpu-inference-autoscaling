@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: inference-defaults
+  namespace: inference
+spec:
+  limits:
+    - type: Container
+      # Defaults apply to any container that omits resource fields — specifically
+      # the Knative queue-proxy sidecar, which is injected without resource declarations.
+      # Pods with explicit resources (user-container, inference-pod) are unaffected.
+      default:
+        cpu: 200m
+        memory: 256Mi
+      defaultRequest:
+        cpu: 25m
+        memory: 64Mi

@@ -1,0 +1,156 @@
+---
+# ApplicationSet for Helm-based platform components
+# Uses multi-source Applications (ArgoCD ≥ 2.6):
+#   source 1 — the Helm chart from its upstream OCI/HTTP registry
+#   source 2 — this git repo, aliased as $values, providing platform/<name>/values.yaml
+#
+# Wave 0: all platform operators install before wave-1 workloads and CRD-dependent configs.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform-helm
+  namespace: argocd
+  annotations:
+    # Wave 1: after security-infra (wave 0) has created namespaces with PSS labels.
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  goTemplate: true
+  generators:
+  - list:
+      elements:
+      - name: nvidia-device-plugin
+        namespace: kube-system
+        chart: nvidia-device-plugin
+        repoURL: https://nvidia.github.io/k8s-device-plugin
+        targetRevision: "0.19.1"
+        syncWave: "0"
+      - name: karpenter
+        namespace: karpenter
+        chart: karpenter
+        repoURL: oci://public.ecr.aws/karpenter/karpenter
+        targetRevision: 1.9.0
+        syncWave: "0"
+      - name: keda
+        namespace: keda
+        chart: keda
+        repoURL: https://kedacore.github.io/charts
+        targetRevision: 2.19.0
+        syncWave: "0"
+      - name: prometheus
+        namespace: monitoring
+        chart: kube-prometheus-stack
+        repoURL: https://prometheus-community.github.io/helm-charts
+        targetRevision: "82.10.4"
+        syncWave: "0"
+      - name: kyverno
+        namespace: kyverno
+        chart: kyverno
+        repoURL: https://kyverno.github.io/kyverno/
+        targetRevision: "3.7.2"
+        syncWave: "0"
+      - name: opencost
+        namespace: opencost
+        chart: opencost
+        repoURL: https://opencost.github.io/opencost-helm-chart
+        targetRevision: "2.5.14"
+        syncWave: "0"
+      - name: dragonfly
+        namespace: dragonfly-system
+        chart: dragonfly
+        repoURL: https://dragonflyoss.github.io/helm-charts
+        targetRevision: "1.6.15"
+        syncWave: "0"
+      - name: pushgateway
+        namespace: monitoring
+        chart: prometheus-pushgateway
+        repoURL: https://prometheus-community.github.io/helm-charts
+        targetRevision: "2.14.0"
+        syncWave: "0"
+      - name: external-secrets
+        namespace: external-secrets
+        chart: external-secrets
+        repoURL: https://charts.external-secrets.io
+        targetRevision: "0.10.5"
+        syncWave: "0"
+      - name: dcgm-exporter
+        namespace: kube-system
+        chart: dcgm-exporter
+        repoURL: https://nvidia.github.io/dcgm-exporter/helm-charts
+        targetRevision: "3.5.0"
+        syncWave: "0"
+  template:
+    metadata:
+      name: "{{.name}}"
+      annotations:
+        argocd.argoproj.io/sync-wave: "{{.syncWave}}"
+    spec:
+      project: default
+      sources:
+      # Source 1: Helm chart from upstream registry
+      - repoURL: "{{.repoURL}}"
+        chart: "{{.chart}}"
+        targetRevision: "{{.targetRevision}}"
+        helm:
+          releaseName: "{{.name}}"
+          ignoreMissingValueFiles: true
+          valueFiles:
+          - $values/platform/{{.name}}/values.yaml
+          - $values/environments/dev/values/{{.name}}-values.yaml
+      # Source 2: git repo as a values provider (aliased $values)
+      - repoURL: https://github.com/YOUR_ORG/eks-gpu-inference-autoscaling
+        targetRevision: main
+        ref: values
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{.namespace}}"
+      ignoreDifferences:
+      # CRDs: SSA causes kube-apiserver to add empty annotations:{} and labels:{} to
+      # metadata even when the Helm chart omits them. Also ignores defaulted fields.
+      - group: apiextensions.k8s.io
+        kind: CustomResourceDefinition
+        jsonPointers:
+        - /metadata/annotations
+        - /metadata/labels
+        jqPathExpressions:
+        - .spec.conversion.strategy
+        - .status
+      # clusterpolicies + policies CRDs are 5MB+ — annotation limit prevents ArgoCD SSA patch.
+      # Pre-apply these CRDs manually with:
+      #   kubectl apply --server-side --force-conflicts --field-manager argocd
+      # when upgrading kyverno chart version.
+      - group: apiextensions.k8s.io
+        kind: CustomResourceDefinition
+        name: clusterpolicies.kyverno.io
+        jqPathExpressions:
+        - .spec
+      - group: apiextensions.k8s.io
+        kind: CustomResourceDefinition
+        name: policies.kyverno.io
+        jqPathExpressions:
+        - .spec
+      # Services: runtime-assigned cluster IPs and defaulted network fields
+      - group: ""
+        kind: Service
+        jsonPointers:
+        - /spec/clusterIP
+        - /spec/clusterIPs
+        - /spec/ipFamilies
+        - /spec/ipFamilyPolicy
+        - /spec/internalTrafficPolicy
+        - /spec/sessionAffinity
+      # StatefulSets: VCTs immutable; k8s 1.27+ defaults pvcRetentionPolicy + revisionHistoryLimit
+      - group: apps
+        kind: StatefulSet
+        jsonPointers:
+        - /spec/volumeClaimTemplates
+        - /spec/persistentVolumeClaimRetentionPolicy
+        - /spec/revisionHistoryLimit
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        - ServerSideApply=true
+        - PrunePropagationPolicy=foreground
+        - PruneLast=true

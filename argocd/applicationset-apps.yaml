@@ -1,0 +1,88 @@
+---
+# ApplicationSet for application workloads (inference + Knative inference).
+#
+# Two scaling approaches run side-by-side as a comparison:
+#   inference         KEDA-driven: scales on Prometheus queue depth metric.
+#                     Best for batch / async workloads.
+#   knative-inference Knative KPA-driven: scales on concurrent HTTP requests.
+#                     Best for interactive / synchronous workloads. Activator
+#                     buffers requests during GPU cold-start (up to timeoutSeconds).
+#
+# Wave 2 (object-level): the root Application applies this ApplicationSet after
+# the platform ApplicationSets (wave 1), giving operators a head start before
+# app workloads attempt to sync. Retry handles any residual CRD-not-ready errors.
+#
+# setup.sh replaces YOUR_ORG with your GitHub org/username and dev with the
+# target environment (dev | staging | production) before you commit and apply.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: apps
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  goTemplate: true
+  generators:
+  - list:
+      elements:
+      - name: inference
+        path: environments/dev/inference
+        namespace: inference
+        syncWave: "2"
+      - name: knative-inference
+        path: environments/dev/knative-inference
+        namespace: inference
+        syncWave: "2"
+  template:
+    metadata:
+      name: "{{.name}}"
+      annotations:
+        argocd.argoproj.io/sync-wave: "{{.syncWave}}"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/YOUR_ORG/eks-gpu-inference-autoscaling
+        targetRevision: main
+        path: "{{.path}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{.namespace}}"
+      ignoreDifferences:
+      # KEDA manages spec.replicas at runtime — ignore drift from the git value of 0.
+      - group: apps
+        kind: Deployment
+        jsonPointers:
+        - /spec/replicas
+      # Knative manages route/revision status and injects annotations at runtime.
+      - group: serving.knative.dev
+        kind: Service
+        jqPathExpressions:
+        - .status
+        - .metadata.annotations["serving.knative.dev/creator"]
+        - .metadata.annotations["serving.knative.dev/lastModifier"]
+      - group: serving.knative.dev
+        kind: Configuration
+        jqPathExpressions:
+        - .status
+      - group: serving.knative.dev
+        kind: Route
+        jqPathExpressions:
+        - .status
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        - PrunePropagationPolicy=foreground
+        - PruneLast=true
+        # Retry handles the case where KEDA or Knative CRDs are not yet installed
+        # when the app first syncs. Wave annotations on generated Applications do not
+        # enforce cross-ApplicationSet ordering — retry is the reliable safety net.
+        retry:
+          limit: 5
+          backoff:
+            duration: 15s
+            factor: 2
+            maxDuration: 5m

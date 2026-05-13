@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform
+  labels:
+    pod-security.kubernetes.io/enforce: "restricted"
+    pod-security.kubernetes.io/audit: "baseline"
+    pod-security.kubernetes.io/warn: "baseline"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: inference
+  labels:
+    pod-security.kubernetes.io/enforce: "baseline"
+    pod-security.kubernetes.io/audit: "baseline"
+    pod-security.kubernetes.io/warn: "baseline"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    pod-security.kubernetes.io/enforce: "privileged"
+    pod-security.kubernetes.io/audit: "baseline"
+    pod-security.kubernetes.io/warn: "baseline"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-secrets
+  labels:
+    pod-security.kubernetes.io/enforce: "baseline"
+    pod-security.kubernetes.io/audit: "baseline"
+    pod-security.kubernetes.io/warn: "baseline"

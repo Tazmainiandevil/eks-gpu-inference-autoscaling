@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-deployment
+  namespace: knative-serving
+data:
+  # Knative's controller resolves image tags to digests before creating revisions.
+  # ECR requires IAM auth for digest resolution, which the Knative controller doesn't have.
+  # Skipping resolution lets the kubelet pull the image at runtime using the node IAM role.
+  registries-skipping-tag-resolving: "ECR_REGISTRY_PLACEHOLDER"

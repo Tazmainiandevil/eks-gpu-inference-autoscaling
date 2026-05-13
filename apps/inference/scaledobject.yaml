@@ -1,0 +1,31 @@
+---
+# KEDA ScaledObject for pod autoscaling based on queue depth
+# Example: scale based on Prometheus metric or Kafka lag
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: inference-scaler
+spec:
+  scaleTargetRef:
+    name: inference-pod
+  minReplicaCount: 0  # Scale to zero in dev/staging
+  maxReplicaCount: 10
+  pollingInterval: 30
+  cooldownPeriod: 300
+  fallback:
+    failureThreshold: 3
+    replicas: 1
+  triggers:
+  - type: prometheus
+    metadata:
+      serverAddress: http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090
+      metricName: gpu_job_queue_depth
+      query: 'sum(gpu_job_queue_depth) or vector(0)'
+      threshold: "5"  # Scale up if queue > 5 jobs
+  # Predictive scaling: warm up GPU nodes before business hours
+  - type: cron
+    metadata:
+      timezone: Europe/Dublin
+      start: 0 8 * * MON-FRI         # 08:00 on weekdays
+      end: 0 18 * * MON-FRI          # 18:00 on weekdays
+      desiredReplicas: "10"           # Pre-warm to 10 pods before work hours

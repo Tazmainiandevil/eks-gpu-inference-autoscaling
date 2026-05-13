@@ -1,0 +1,30 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-gpu-toleration
+spec:
+  validationFailureAction: audit
+  rules:
+    - name: check-gpu-taint-toleration
+      match:
+        resources:
+          kinds:
+            - Pod
+          namespaces:
+            - inference
+      validate:
+        message: >-
+          GPU pods must tolerate the gpu=true:NoSchedule taint.
+          Add to pod spec:
+            tolerations:
+              - key: gpu
+                operator: Equal
+                value: "true"
+                effect: NoSchedule
+        pattern:
+          spec:
+            tolerations:
+              - (key): "gpu"
+                operator: Equal
+                value: "true"
+                effect: NoSchedule

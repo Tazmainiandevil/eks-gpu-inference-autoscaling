@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Production overlay for Knative inference.
+# minScale: 2 — two warm pods across AZs eliminate cold-start latency entirely
+# and provide HA during voluntary pod disruptions.
+# scaleDownDelay: 30m — keeps pods warm through brief traffic lulls.
+
+resources:
+  - ../../../apps/knative-inference
+
+images:
+  - name: REGISTRY_PLACEHOLDER/inference-stub
+    newName: YOUR_AWS_ACCOUNT_ID.dkr.ecr.YOUR_AWS_REGION.amazonaws.com/inference-stub
+    newTag: latest
+
+patches:
+  - target:
+      kind: Service
+      name: inference-kn
+    patch: |
+      - op: replace
+        path: /metadata/annotations/autoscaling.knative.dev~1minScale
+        value: "2"
+      - op: replace
+        path: /metadata/annotations/autoscaling.knative.dev~1maxScale
+        value: "30"
+      - op: replace
+        path: /metadata/annotations/autoscaling.knative.dev~1scaleDownDelay
+        value: "30m"

@@ -1,0 +1,37 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/YOUR_ORG/eks-gpu-inference-autoscaling
+    targetRevision: main
+    path: argocd
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+  ignoreDifferences:
+  - group: apiextensions.k8s.io
+    kind: CustomResourceDefinition
+    jsonPointers:
+    - /spec/conversion/webhook/clientConfig/caBundle
+    - /spec/names/shortNames
+  # ApplicationSet status is managed by argocd-applicationset-controller, not git.
+  # template.spec.ignoreDifferences: ArgoCD's schema normalizer cannot round-trip
+  # this field in ApplicationSet templates (renders it as " " in desired state),
+  # so suppress the diff here and rely on the generated Application objects for enforcement.
+  - group: argoproj.io
+    kind: ApplicationSet
+    jsonPointers:
+    - /status
+    - /spec/template/spec/ignoreDifferences

@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: opencost
+
+helmCharts:
+  - name: opencost
+    repo: https://opencostmodel.github.io/opencost-helm-charts
+    version: "1.39.0"
+    releaseName: opencost
+    valuesFile: values.yaml

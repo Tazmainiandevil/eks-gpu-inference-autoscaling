@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: inference
+
+resources:
+  - kservice.yaml
+
+images:
+  - name: REGISTRY_PLACEHOLDER/inference-stub
+    newName: REGISTRY_PLACEHOLDER/inference-stub
+    newTag: latest
+
+labels:
+  - pairs:
+      app.kubernetes.io/name: knative-inference
+      app.kubernetes.io/component: gpu-workload
+      managed-by: argocd
+    includeSelectors: false

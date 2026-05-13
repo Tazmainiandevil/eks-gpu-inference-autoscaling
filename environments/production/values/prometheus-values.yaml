@@ -1,0 +1,23 @@
+# Production environment overrides for Prometheus
+# Long retention, persistent storage, HA
+prometheus:
+  prometheusSpec:
+    replicas: 2
+    retention: 30d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          resources:
+            requests:
+              storage: 200Gi
+    remoteWrite:
+    - url: https://monitoring.example.com/write  # Configure your remote storage
+
+grafana:
+  enabled: true
+  replicas: 2
+  persistence:
+    enabled: true
+    storageClassName: gp3
+    size: 10Gi

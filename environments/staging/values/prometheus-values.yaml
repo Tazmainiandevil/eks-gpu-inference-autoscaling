@@ -1,0 +1,13 @@
+# Staging environment overrides for Prometheus
+prometheus:
+  prometheusSpec:
+    retention: 14d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          resources:
+            requests:
+              storage: 50Gi
+
+grafana:
+  enabled: true

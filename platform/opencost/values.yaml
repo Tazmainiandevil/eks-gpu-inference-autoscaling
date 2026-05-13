@@ -1,0 +1,72 @@
+# OpenCost: open-source Kubernetes cost measurement
+# Provides per-workload GPU cost visibility integrated with Prometheus.
+# Set by scripts/setup.sh — cluster_name from environments/<env>.tfvars.
+
+opencost:
+  exporter:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    # Soft affinity: prefer app-tier nodes over system nodes.
+    # System nodes carry a NoSchedule taint that OpenCost does not tolerate,
+    # so this affinity is mostly documentation — but makes intent explicit and
+    # ensures correct placement if the taint is ever relaxed.
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+                - key: role
+                  operator: In
+                  values: [app]
+
+  prometheus:
+    internal:
+      enabled: true
+      serviceName: prometheus-kube-prometheus-prometheus
+      namespaceName: monitoring
+      port: 9090
+      scheme: http
+
+  cloudProvider: aws
+  # Replaced by scripts/setup.sh with the cluster_name from dev.tfvars
+  clusterID: eks-gpu-demo
+
+  # GPU cost model — OpenCost queries the AWS pricing API for g4dn/g5/p4d rates.
+  assetClass: gpu
+
+  # Spot pricing accuracy.
+  # Without this, OpenCost reports spot nodes at on-demand rates (inflated ~60-70%).
+  # Enable by:
+  #   1. Turn on AWS Spot Instance Data Feed in the EC2 console → Spot Requests → Data Feed
+  #      and point it at an S3 bucket in us-east-1.
+  #   2. Set the bucket name and region below and remove the comment markers.
+  #
+  # aws:
+  #   spotDataBucket: "SPOT_DATA_BUCKET_PLACEHOLDER"
+  #   spotDataRegion: "us-east-1"
+  #   spotDataPrefix: ""
+
+# Network cost tracking — captures per-pod egress and classifies as
+# internet / cross-region / cross-zone. Required for network panels in Grafana.
+networkCosts:
+  enabled: true
+  podMonitor:
+    enabled: true
+  config:
+    services:
+      amazon-web-services: true
+
+serviceMonitor:
+  enabled: true
+  interval: 30s
+
+service:
+  type: ClusterIP
+  port: 9003

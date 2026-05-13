@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: inference-stub
+  namespace: monitoring
+  labels:
+    release: prometheus  # picked up by kube-prometheus-stack ruleSelector
+spec:
+  namespaceSelector:
+    matchNames:
+      - inference
+  selector:
+    matchLabels:
+      app: inference-pod
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

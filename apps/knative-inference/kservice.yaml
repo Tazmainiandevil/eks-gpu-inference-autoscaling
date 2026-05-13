@@ -1,0 +1,79 @@
+---
+# Knative KService for GPU inference — HTTP-native scale-to-zero.
+#
+# Complements the KEDA ScaledObject approach in apps/inference/:
+#
+#   KEDA (apps/inference/)          — queue-depth driven, best for batch/async inference.
+#                                     Pods scale based on Prometheus metric.
+#
+#   Knative KPA (this file)         — request-concurrency driven, best for interactive/sync
+#                                     inference. The Knative activator buffers HTTP requests
+#                                     during GPU cold-start so callers are not rejected.
+#
+# GPU node targeting: nvidia.com/gpu resource request + gpu toleration is sufficient for
+# Karpenter to provision and schedule on a GPU node. Explicit affinity is not used here
+# because Knative requires the kubernetes.podspec-affinity feature flag to allow it.
+#
+# timeoutSeconds: 360 covers the worst-case cold-start. Reduce to 120 once warm nodes
+# are kept via minScale: 1 (staging) or managed node baseline (production).
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: inference-kn
+  namespace: inference
+  labels:
+    # cluster-local visibility routes through kourier-internal (ClusterIP) and avoids
+    # needing an external LoadBalancer — correct for inference called from within the cluster.
+    networking.knative.dev/visibility: cluster-local
+spec:
+  template:
+    metadata:
+      annotations:
+        # All autoscaling annotations must be under spec.template.metadata.annotations —
+        # enforced by the Knative validating webhook.
+        autoscaling.knative.dev/class: kpa.autoscaling.knative.dev
+        autoscaling.knative.dev/target: "5"          # scale up when >5 concurrent requests/pod
+        autoscaling.knative.dev/minScale: "0"         # scale to zero when idle
+        autoscaling.knative.dev/maxScale: "10"
+        autoscaling.knative.dev/scaleDownDelay: "5m"  # stay warm 5 min after last request
+        # queue-proxy sidecar resources — required because inference-quota enforces limits
+        # on all containers in the namespace, including Knative-injected sidecars.
+        queue.sidecar.serving.knative.dev/cpu-request: "25m"
+        queue.sidecar.serving.knative.dev/memory-request: "64Mi"
+        queue.sidecar.serving.knative.dev/cpu-limit: "200m"
+        queue.sidecar.serving.knative.dev/memory-limit: "256Mi"
+    spec:
+      # Allow up to 360s for GPU cold-start before Knative times out buffered requests.
+      timeoutSeconds: 360
+      containerConcurrency: 10
+      tolerations:
+        - key: gpu
+          value: "true"
+          effect: NoSchedule
+      containers:
+        - image: REGISTRY_PLACEHOLDER/inference-stub:latest  # replaced by scripts/setup.sh
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              protocol: TCP
+          resources:
+            requests:
+              cpu: "2"
+              memory: 8Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "4"
+              memory: 14Gi
+              nvidia.com/gpu: "1"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5

@@ -1,0 +1,1055 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gpu-scaling-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"   # picked up by kube-prometheus-stack sidecar
+data:
+  gpu-scaling.json: |
+    {
+      "title": "GPU Inference — Scaling & Cost",
+      "uid": "gpu-scaling-v1",
+      "schemaVersion": 38,
+      "refresh": "15s",
+      "time": { "from": "now-1h", "to": "now" },
+      "templating": {
+        "list": [
+          {
+            "name": "namespace",
+            "type": "constant",
+            "current": { "value": "inference" }
+          }
+        ]
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Queue Depth vs Replica Count vs GPU Nodes",
+          "description": "The core scaling story: queue drives KEDA (replicas), replicas drive Karpenter (nodes).",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 0, "w": 24, "h": 8 },
+          "fieldConfig": {
+            "defaults": { "custom": { "lineWidth": 2 } },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "Queue Depth" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "Replicas" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "GPU Nodes" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+              }
+            ]
+          },
+          "targets": [
+            {
+              "expr": "sum(gpu_job_queue_depth)",
+              "legendFormat": "Queue Depth"
+            },
+            {
+              "expr": "kube_deployment_status_replicas{namespace=\"inference\",deployment=\"inference-pod\"}",
+              "legendFormat": "Replicas"
+            },
+            {
+              "expr": "count(kube_node_labels{label_karpenter_sh_nodepool=\"gpu\"}) or vector(0)",
+              "legendFormat": "GPU Nodes (Karpenter)"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "title": "Queue Depth",
+          "type": "stat",
+          "gridPos": { "x": 0, "y": 8, "w": 4, "h": 4 },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "steps": [
+                  { "color": "green", "value": 0 },
+                  { "color": "yellow", "value": 5 },
+                  { "color": "red", "value": 20 }
+                ]
+              }
+            }
+          },
+          "targets": [{ "expr": "sum(gpu_job_queue_depth)", "legendFormat": "Queue Depth" }]
+        },
+        {
+          "id": 3,
+          "title": "Active Replicas",
+          "type": "stat",
+          "gridPos": { "x": 4, "y": 8, "w": 4, "h": 4 },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "steps": [
+                  { "color": "blue", "value": 0 },
+                  { "color": "green", "value": 1 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "kube_deployment_status_replicas_available{namespace=\"inference\",deployment=\"inference-pod\"}",
+              "legendFormat": "Available"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "title": "GPU Nodes (Karpenter)",
+          "type": "stat",
+          "gridPos": { "x": 8, "y": 8, "w": 4, "h": 4 },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "steps": [
+                  { "color": "blue", "value": 0 },
+                  { "color": "green", "value": 1 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "count(kube_node_labels{label_karpenter_sh_nodepool=\"gpu\"}) or vector(0)",
+              "legendFormat": "GPU Nodes"
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "title": "Allocatable GPUs",
+          "type": "stat",
+          "gridPos": { "x": 12, "y": 8, "w": 4, "h": 4 },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "targets": [
+            {
+              "expr": "sum(kube_node_status_allocatable{resource=\"nvidia_com_gpu\"}) or vector(0)",
+              "legendFormat": "Allocatable GPUs"
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "title": "Pending Pods",
+          "type": "stat",
+          "gridPos": { "x": 16, "y": 8, "w": 4, "h": 4 },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "steps": [
+                  { "color": "green", "value": 0 },
+                  { "color": "yellow", "value": 1 },
+                  { "color": "red", "value": 5 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(kube_pod_status_phase{namespace=\"inference\",phase=\"Pending\"}) or vector(0)",
+              "legendFormat": "Pending"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "title": "KEDA Scaler Errors",
+          "type": "stat",
+          "gridPos": { "x": 20, "y": 8, "w": 4, "h": 4 },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "steps": [
+                  { "color": "green", "value": 0 },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(increase(keda_scaler_errors_total[5m])) or vector(0)",
+              "legendFormat": "KEDA Errors (5m)"
+            }
+          ]
+        },
+        {
+          "id": 8,
+          "title": "Pod Phase Distribution (inference namespace)",
+          "type": "piechart",
+          "gridPos": { "x": 0, "y": 12, "w": 8, "h": 8 },
+          "targets": [
+            { "expr": "sum(kube_pod_status_phase{namespace=\"inference\",phase=\"Running\"})", "legendFormat": "Running" },
+            { "expr": "sum(kube_pod_status_phase{namespace=\"inference\",phase=\"Pending\"})", "legendFormat": "Pending" },
+            { "expr": "sum(kube_pod_status_phase{namespace=\"inference\",phase=\"Failed\"})", "legendFormat": "Failed" }
+          ]
+        },
+        {
+          "id": 9,
+          "title": "Karpenter GPU Node Count",
+          "type": "timeseries",
+          "gridPos": { "x": 8, "y": 12, "w": 16, "h": 8 },
+          "targets": [
+            {
+              "expr": "count(kube_node_labels{label_karpenter_sh_nodepool=\"gpu\"}) or vector(0)",
+              "legendFormat": "GPU Nodes (Karpenter)"
+            },
+            {
+              "expr": "count(kube_node_labels{label_karpenter_sh_nodepool=\"general\"}) or vector(0)",
+              "legendFormat": "General Nodes (Karpenter)"
+            },
+            {
+              "expr": "karpenter_voluntary_disruption_consolidation_timeouts_total or vector(0)",
+              "legendFormat": "Consolidation Timeouts"
+            }
+          ]
+        },
+        {
+          "id": 10,
+          "title": "Replica Scaling Timeline",
+          "description": "Shows desired vs available replicas and pending pods over time — the observable record of every KEDA scale event.",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 20, "w": 24, "h": 8 },
+          "fieldConfig": {
+            "defaults": { "custom": { "lineWidth": 2 } },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "Desired Replicas" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "Available Replicas" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "Pending Pods" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+              }
+            ]
+          },
+          "targets": [
+            {
+              "expr": "kube_deployment_spec_replicas{namespace=\"inference\",deployment=\"inference-pod\"}",
+              "legendFormat": "Desired Replicas"
+            },
+            {
+              "expr": "kube_deployment_status_replicas_available{namespace=\"inference\",deployment=\"inference-pod\"}",
+              "legendFormat": "Available Replicas"
+            },
+            {
+              "expr": "sum(kube_pod_status_phase{namespace=\"inference\",phase=\"Pending\"}) or vector(0)",
+              "legendFormat": "Pending Pods"
+            }
+          ]
+        },
+        {
+          "id": 26,
+          "title": "Inference Request Latency (p50 / p95 / p99)",
+          "description": "End-to-end latency of POST /infer requests as recorded by the inference stub. Sourced from inference_request_duration_seconds histogram via ServiceMonitor.",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 28, "w": 16, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": { "lineWidth": 2 }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "p50" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "p95" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "p99" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+              }
+            ]
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(inference_request_duration_seconds_bucket{namespace=\"inference\"}[2m])) by (le))",
+              "legendFormat": "p50"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(inference_request_duration_seconds_bucket{namespace=\"inference\"}[2m])) by (le))",
+              "legendFormat": "p95"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(inference_request_duration_seconds_bucket{namespace=\"inference\"}[2m])) by (le))",
+              "legendFormat": "p99"
+            }
+          ]
+        },
+        {
+          "id": 27,
+          "title": "Throughput (req/s)",
+          "description": "Inference requests processed per second across all pods.",
+          "type": "stat",
+          "gridPos": { "x": 16, "y": 28, "w": 4, "h": 4 },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "thresholds": {
+                "steps": [
+                  { "color": "blue", "value": 0 },
+                  { "color": "green", "value": 1 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(inference_infer_total{namespace=\"inference\"}[1m])) or vector(0)",
+              "legendFormat": "req/s"
+            }
+          ]
+        },
+        {
+          "id": 28,
+          "title": "Error Rate",
+          "description": "Fraction of /infer requests returning an error. Red above 1%.",
+          "type": "stat",
+          "gridPos": { "x": 20, "y": 28, "w": 4, "h": 4 },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "decimals": 1,
+              "thresholds": {
+                "steps": [
+                  { "color": "green", "value": 0 },
+                  { "color": "yellow", "value": 0.01 },
+                  { "color": "red", "value": 0.05 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(inference_errors_total{namespace=\"inference\"}[5m])) / clamp_min(sum(rate(inference_infer_total{namespace=\"inference\"}[5m])), 0.001) or vector(0)",
+              "legendFormat": "Error %"
+            }
+          ]
+        },
+        {
+          "id": 29,
+          "title": "Node Provisioning State",
+          "description": "Karpenter NodeClaims by state. Gap between 'launched' and 'initialized' is the GPU node boot + device plugin ready time.",
+          "type": "timeseries",
+          "gridPos": { "x": 16, "y": 32, "w": 8, "h": 4 },
+          "fieldConfig": {
+            "defaults": { "custom": { "lineWidth": 2 } },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "Launched" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "Initialized" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+              }
+            ]
+          },
+          "targets": [
+            {
+              "expr": "count(kube_node_labels{label_karpenter_sh_nodepool=\"gpu\"}) or vector(0)",
+              "legendFormat": "GPU Nodes Ready"
+            },
+            {
+              "expr": "count(kube_node_labels{label_karpenter_sh_nodepool=\"general\"}) or vector(0)",
+              "legendFormat": "General Nodes Ready"
+            }
+          ]
+        },
+        {
+          "id": 11,
+          "title": "Total Cluster Spend ($/hr)",
+          "type": "stat",
+          "gridPos": { "x": 0, "y": 36, "w": 4, "h": 4 },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "decimals": 2,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": 0 },
+                  { "color": "yellow", "value": 1 },
+                  { "color": "red", "value": 5 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(node_total_hourly_cost) or vector(0)",
+              "legendFormat": "Total $/hr"
+            }
+          ]
+        },
+        {
+          "id": 12,
+          "title": "Managed Nodes — Always-On ($/hr)",
+          "description": "System + app managed node groups. Fixed baseline cost regardless of inference load.",
+          "type": "stat",
+          "gridPos": { "x": 4, "y": 36, "w": 4, "h": 4 },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "decimals": 2,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "blue", "value": 0 },
+                  { "color": "yellow", "value": 1 },
+                  { "color": "red", "value": 3 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "(sum(node_total_hourly_cost) - sum(node_total_hourly_cost * on(node) group_left() kube_node_labels{label_karpenter_sh_nodepool=~\".+\"})) or vector(0)",
+              "legendFormat": "Managed $/hr"
+            }
+          ]
+        },
+        {
+          "id": 13,
+          "title": "Karpenter GPU ($/hr)",
+          "description": "Variable cost — goes to $0 when inference is scaled to zero.",
+          "type": "stat",
+          "gridPos": { "x": 8, "y": 36, "w": 4, "h": 4 },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "decimals": 2,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": 0 },
+                  { "color": "yellow", "value": 0.5 },
+                  { "color": "red", "value": 2 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(node_total_hourly_cost * on(node) group_left() kube_node_labels{label_karpenter_sh_nodepool=\"gpu\"}) or vector(0)",
+              "legendFormat": "GPU $/hr"
+            }
+          ]
+        },
+        {
+          "id": 14,
+          "title": "Karpenter General ($/hr)",
+          "description": "CPU overflow nodes — spot, scales to zero when idle.",
+          "type": "stat",
+          "gridPos": { "x": 12, "y": 36, "w": 4, "h": 4 },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "decimals": 2,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": 0 },
+                  { "color": "yellow", "value": 0.3 },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(node_total_hourly_cost * on(node) group_left() kube_node_labels{label_karpenter_sh_nodepool=\"general\"}) or vector(0)",
+              "legendFormat": "General $/hr"
+            }
+          ]
+        },
+        {
+          "id": 15,
+          "title": "Cost per Active Replica ($/hr)",
+          "description": "GPU node spend divided by available inference replicas. High = underutilised nodes.",
+          "type": "stat",
+          "gridPos": { "x": 16, "y": 36, "w": 4, "h": 4 },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "decimals": 2,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": 0 },
+                  { "color": "yellow", "value": 0.3 },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "(sum(node_total_hourly_cost * on(node) group_left() kube_node_labels{label_karpenter_sh_nodepool=\"gpu\"}) / clamp_min(sum(kube_deployment_status_replicas_available{namespace=\"inference\",deployment=\"inference-pod\"}), 1)) or vector(0)",
+              "legendFormat": "$/replica/hr"
+            }
+          ]
+        },
+        {
+          "id": 16,
+          "title": "GPU Allocation Efficiency",
+          "description": "% of allocatable GPUs with active pod requests. Low = paying for idle GPUs.",
+          "type": "stat",
+          "gridPos": { "x": 20, "y": 36, "w": 4, "h": 4 },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": 0 },
+                  { "color": "yellow", "value": 50 },
+                  { "color": "green", "value": 80 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "(sum(kube_pod_container_resource_requests{resource=\"nvidia_com_gpu\",namespace=\"inference\"}) / clamp_min(sum(kube_node_status_allocatable{resource=\"nvidia_com_gpu\"}), 1) * 100) or vector(0)",
+              "legendFormat": "Allocation %"
+            }
+          ]
+        },
+        {
+          "id": 17,
+          "title": "Cluster Cost Breakdown Over Time ($/hr)",
+          "description": "Stacked view: GPU and general Karpenter costs track load; managed nodes are flat.",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 40, "w": 12, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "custom": { "lineWidth": 2, "fillOpacity": 20, "stacking": { "mode": "normal" } }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "Managed (Always-On)" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "Karpenter GPU" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "Karpenter General" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+              }
+            ]
+          },
+          "targets": [
+            {
+              "expr": "(sum(node_total_hourly_cost) - sum(node_total_hourly_cost * on(node) group_left() kube_node_labels{label_karpenter_sh_nodepool=~\".+\"})) or vector(0)",
+              "legendFormat": "Managed (Always-On)"
+            },
+            {
+              "expr": "sum(node_total_hourly_cost * on(node) group_left() kube_node_labels{label_karpenter_sh_nodepool=\"gpu\"}) or vector(0)",
+              "legendFormat": "Karpenter GPU"
+            },
+            {
+              "expr": "sum(node_total_hourly_cost * on(node) group_left() kube_node_labels{label_karpenter_sh_nodepool=\"general\"}) or vector(0)",
+              "legendFormat": "Karpenter General"
+            }
+          ]
+        },
+        {
+          "id": 18,
+          "title": "GPU Spend vs Scale ($/hr)",
+          "description": "GPU spend rate against replica and node count — shows cost elasticity of the architecture.",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 40, "w": 12, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "custom": { "lineWidth": 2 }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "GPU Nodes" },
+                "properties": [
+                  { "id": "custom.axisPlacement", "value": "right" },
+                  { "id": "unit", "value": "short" },
+                  { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }
+                ]
+              },
+              {
+                "matcher": { "id": "byName", "options": "Replicas" },
+                "properties": [
+                  { "id": "custom.axisPlacement", "value": "right" },
+                  { "id": "unit", "value": "short" },
+                  { "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }
+                ]
+              }
+            ]
+          },
+          "targets": [
+            {
+              "expr": "sum(node_total_hourly_cost * on(node) group_left() kube_node_labels{label_karpenter_sh_nodepool=\"gpu\"}) or vector(0)",
+              "legendFormat": "GPU Spend ($/hr)"
+            },
+            {
+              "expr": "count(kube_node_labels{label_karpenter_sh_nodepool=\"gpu\"}) or vector(0)",
+              "legendFormat": "GPU Nodes"
+            },
+            {
+              "expr": "kube_deployment_status_replicas_available{namespace=\"inference\",deployment=\"inference-pod\"} or vector(0)",
+              "legendFormat": "Replicas"
+            }
+          ]
+        },
+        {
+          "id": 19,
+          "title": "EBS / PVC Spend ($/hr)",
+          "description": "Persistent volume costs: root EBS on every node plus PVCs (Prometheus TSDB, Grafana).",
+          "type": "stat",
+          "gridPos": { "x": 0, "y": 48, "w": 6, "h": 4 },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "decimals": 3,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": 0 },
+                  { "color": "yellow", "value": 0.05 },
+                  { "color": "red", "value": 0.5 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(pv_hourly_cost) or vector(0)",
+              "legendFormat": "PV $/hr"
+            }
+          ]
+        },
+        {
+          "id": 20,
+          "title": "EBS / PVC Cost Over Time ($/hr)",
+          "description": "PV costs over time by namespace. Spikes when GPU nodes join (root volume attached).",
+          "type": "timeseries",
+          "gridPos": { "x": 6, "y": 48, "w": 18, "h": 4 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "custom": { "lineWidth": 2 }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum by(namespace) (pv_hourly_cost) or vector(0)",
+              "legendFormat": "{{namespace}}"
+            }
+          ]
+        },
+        {
+          "id": 21,
+          "title": "Est. Internet Egress Cost ($/hr)",
+          "description": "Approximate cost: internet egress bytes/s × $0.09/GB × 3600. Requires OpenCost network-costs DaemonSet.",
+          "type": "stat",
+          "gridPos": { "x": 0, "y": 52, "w": 6, "h": 4 },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "decimals": 3,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": 0 },
+                  { "color": "yellow", "value": 0.05 },
+                  { "color": "red", "value": 0.5 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "(sum(rate(kubecost_network_internet_egress_bytes_total[5m])) * 3600 / 1e9 * 0.09) or vector(0)",
+              "legendFormat": "Internet $/hr"
+            }
+          ]
+        },
+        {
+          "id": 22,
+          "title": "Est. Cross-Zone Cost ($/hr)",
+          "description": "Approximate cost: cross-zone bytes/s × $0.01/GB × 3600. Requires OpenCost network-costs DaemonSet.",
+          "type": "stat",
+          "gridPos": { "x": 6, "y": 52, "w": 6, "h": 4 },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "decimals": 3,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": 0 },
+                  { "color": "yellow", "value": 0.01 },
+                  { "color": "red", "value": 0.1 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "(sum(rate(kubecost_network_zone_egress_bytes_total[5m])) * 3600 / 1e9 * 0.01) or vector(0)",
+              "legendFormat": "Cross-Zone $/hr"
+            }
+          ]
+        },
+        {
+          "id": 23,
+          "title": "Internet Egress Rate",
+          "description": "Bytes/s leaving the cluster. Includes model downloads, API callbacks, telemetry.",
+          "type": "stat",
+          "gridPos": { "x": 12, "y": 52, "w": 6, "h": 4 },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": 0 },
+                  { "color": "yellow", "value": 1048576 },
+                  { "color": "red", "value": 10485760 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(kubecost_network_internet_egress_bytes_total[5m])) or vector(0)",
+              "legendFormat": "Internet Egress"
+            }
+          ]
+        },
+        {
+          "id": 24,
+          "title": "Cross-Zone Traffic Rate",
+          "description": "Bytes/s crossing AZ boundaries. Worth minimising — $0.01/GB each way.",
+          "type": "stat",
+          "gridPos": { "x": 18, "y": 52, "w": 6, "h": 4 },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": 0 },
+                  { "color": "yellow", "value": 1048576 },
+                  { "color": "red", "value": 10485760 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(kubecost_network_zone_egress_bytes_total[5m])) or vector(0)",
+              "legendFormat": "Cross-Zone"
+            }
+          ]
+        },
+        {
+          "id": 30,
+          "title": "GPU Utilization % (per GPU)",
+          "description": "Real GPU compute utilization from DCGM. 0% = idle (wasting money); 100% = saturated (consider scaling out). Only appears when dcgm-exporter is running on a GPU node.",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 64, "w": 12, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "custom": { "lineWidth": 2 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "blue", "value": 0 },
+                  { "color": "green", "value": 30 },
+                  { "color": "orange", "value": 80 },
+                  { "color": "red", "value": 95 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "DCGM_FI_DEV_GPU_UTIL{namespace=\"kube-system\"}",
+              "legendFormat": "GPU {{gpu}} on {{instance}}"
+            }
+          ]
+        },
+        {
+          "id": 31,
+          "title": "GPU Memory Used (GiB)",
+          "description": "GPU framebuffer memory consumed. Approaching the limit means the model is close to OOM — scale out or upgrade instance type.",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 64, "w": 12, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "decgbytes",
+              "custom": { "lineWidth": 2 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": 0 },
+                  { "color": "yellow", "value": 12 },
+                  { "color": "red", "value": 15 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "DCGM_FI_DEV_FB_USED{namespace=\"kube-system\"} / 1024",
+              "legendFormat": "Used — GPU {{gpu}} on {{instance}}"
+            },
+            {
+              "expr": "(DCGM_FI_DEV_FB_USED{namespace=\"kube-system\"} + DCGM_FI_DEV_FB_FREE{namespace=\"kube-system\"}) / 1024",
+              "legendFormat": "Total — GPU {{gpu}} on {{instance}}"
+            }
+          ]
+        },
+        {
+          "id": 32,
+          "title": "GPU Temperature (°C)",
+          "description": "GPU die temperature. Above 83°C the GPU throttles; above 90°C check airflow and thermal paste on the instance.",
+          "type": "stat",
+          "gridPos": { "x": 0, "y": 72, "w": 6, "h": 4 },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": 0 },
+                  { "color": "yellow", "value": 70 },
+                  { "color": "orange", "value": 83 },
+                  { "color": "red", "value": 90 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "max(DCGM_FI_DEV_GPU_TEMP{namespace=\"kube-system\"})",
+              "legendFormat": "Max GPU Temp"
+            }
+          ]
+        },
+        {
+          "id": 33,
+          "title": "GPU Power Draw (W)",
+          "description": "Watt draw per GPU. Sustained maximum (>250W on g4dn) indicates full utilization. Zero means no compute.",
+          "type": "stat",
+          "gridPos": { "x": 6, "y": 72, "w": 6, "h": 4 },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "watt",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "blue", "value": 0 },
+                  { "color": "green", "value": 50 },
+                  { "color": "orange", "value": 200 },
+                  { "color": "red", "value": 280 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(DCGM_FI_DEV_POWER_USAGE{namespace=\"kube-system\"})",
+              "legendFormat": "Total Power (W)"
+            }
+          ]
+        },
+        {
+          "id": 25,
+          "title": "Network Egress Cost Over Time ($/hr)",
+          "description": "Internet and cross-zone egress costs over time. Spikes during model pulls or large result payloads.",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 56, "w": 24, "h": 8 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "custom": { "lineWidth": 2, "fillOpacity": 10 }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "Internet Egress ($/hr)" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "Cross-Zone ($/hr)" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "Cross-Region ($/hr)" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }]
+              }
+            ]
+          },
+          "targets": [
+            {
+              "expr": "(sum(rate(kubecost_network_internet_egress_bytes_total[5m])) * 3600 / 1e9 * 0.09) or vector(0)",
+              "legendFormat": "Internet Egress ($/hr)"
+            },
+            {
+              "expr": "(sum(rate(kubecost_network_zone_egress_bytes_total[5m])) * 3600 / 1e9 * 0.01) or vector(0)",
+              "legendFormat": "Cross-Zone ($/hr)"
+            },
+            {
+              "expr": "(sum(rate(kubecost_network_region_egress_bytes_total[5m])) * 3600 / 1e9 * 0.02) or vector(0)",
+              "legendFormat": "Cross-Region ($/hr)"
+            }
+          ]
+        },
+        {
+          "id": 34,
+          "title": "GPU Memory Utilisation % (per GPU)",
+          "description": "VRAM saturation per device — shows whether scaling is headroom-driven or saturation-driven.",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 80 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 70 },
+                  { "color": "red", "value": 90 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "DCGM_FI_DEV_FB_USED{namespace=\"kube-system\"} / (DCGM_FI_DEV_FB_USED{namespace=\"kube-system\"} + DCGM_FI_DEV_FB_FREE{namespace=\"kube-system\"}) * 100",
+              "legendFormat": "GPU {{gpu}} on {{instance}}"
+            }
+          ]
+        },
+        {
+          "id": 35,
+          "title": "Cost per Inference Request ($/1k requests)",
+          "description": "GPU spend per 1000 inferences — the key cost-efficiency metric for the blog post.",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 80 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "decimals": 4,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 0.01 },
+                  { "color": "red", "value": 0.10 }
+                ]
+              }
+            }
+          },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+          "targets": [
+            {
+              "expr": "(sum(node_total_hourly_cost * on(node) group_left() kube_node_labels{label_karpenter_sh_nodepool=\"gpu\"}) or vector(0)) / 3600 / clamp_min(sum(rate(inference_infer_total{namespace=\"inference\"}[2m])), 0.001) * 1000",
+              "legendFormat": "$/1k requests"
+            }
+          ]
+        },
+        {
+          "id": 36,
+          "title": "Scale-Out Timeline",
+          "description": "Correlated view of the full scale-out event: queue spike → KEDA scales pods → Karpenter provisions GPU node → pod ready.",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 88 },
+          "fieldConfig": {
+            "defaults": { "custom": { "lineWidth": 2 } },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "Queue Depth" },
+                "properties": [
+                  { "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } },
+                  { "id": "custom.axisPlacement", "value": "right" }
+                ]
+              },
+              {
+                "matcher": { "id": "byName", "options": "Replicas (Desired)" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "Replicas (Ready)" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "GPU Nodes" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "purple", "mode": "fixed" } }]
+              }
+            ]
+          },
+          "targets": [
+            {
+              "expr": "sum(gpu_job_queue_depth) or vector(0)",
+              "legendFormat": "Queue Depth"
+            },
+            {
+              "expr": "kube_deployment_spec_replicas{namespace=\"inference\",deployment=\"inference-pod\"} or vector(0)",
+              "legendFormat": "Replicas (Desired)"
+            },
+            {
+              "expr": "kube_deployment_status_replicas_available{namespace=\"inference\",deployment=\"inference-pod\"} or vector(0)",
+              "legendFormat": "Replicas (Ready)"
+            },
+            {
+              "expr": "count(kube_node_labels{label_karpenter_sh_nodepool=\"gpu\"}) or vector(0)",
+              "legendFormat": "GPU Nodes"
+            }
+          ]
+        }
+      ]
+    }

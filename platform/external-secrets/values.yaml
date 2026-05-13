@@ -1,0 +1,34 @@
+# External Secrets Operator — platform Helm values.
+# IAM access is via EKS Pod Identity bound by Terraform (no serviceAccount annotation needed).
+# All three ESO components (controller, webhook, cert-controller) tolerate the system taint
+# so they schedule alongside other platform operators on system nodes.
+
+installCRDs: true
+
+serviceAccount:
+  create: true
+  name: external-secrets
+
+nodeSelector:
+  node-type: system
+
+tolerations:
+  - key: system
+    value: "true"
+    effect: NoSchedule
+
+webhook:
+  nodeSelector:
+    node-type: system
+  tolerations:
+    - key: system
+      value: "true"
+      effect: NoSchedule
+
+certController:
+  nodeSelector:
+    node-type: system
+  tolerations:
+    - key: system
+      value: "true"
+      effect: NoSchedule

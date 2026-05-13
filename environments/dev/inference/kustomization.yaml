@@ -1,0 +1,41 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Dev overlay for the inference workload — GPU mode.
+#
+# Runs the base deployment as-is (GPU resources + tolerations intact) so
+# Karpenter provisions real g4dn spot nodes and NVIDIA device plugin exposes
+# nvidia.com/gpu. Use QUEUE_DEPTH=10 with validate-scaling.sh for a minimal
+# 2-GPU test (ceil(10/5)=2 replicas → 2 g4dn.xlarge nodes).
+#
+# To switch back to CPU simulation (zero GPU cost for day-to-day dev):
+#   - Add back the Deployment patch that removes tolerations, replaces affinity
+#     to workload-type=general, and replaces resources with cpu/memory only.
+
+resources:
+  - ../../../apps/inference
+
+images:
+  - name: REGISTRY_PLACEHOLDER/inference-stub
+    newName: YOUR_AWS_ACCOUNT_ID.dkr.ecr.YOUR_AWS_REGION.amazonaws.com/inference-stub
+    newTag: latest
+
+patches:
+  # Remove PDB — meaningless when KEDA minReplicaCount=0 (scale-to-zero environment).
+  - target:
+      kind: PodDisruptionBudget
+      name: inference-pdb
+    patch: |
+      $patch: delete
+      apiVersion: policy/v1
+      kind: PodDisruptionBudget
+      metadata:
+        name: inference-pdb
+
+  # Remove cron trigger — dev tests run at any hour, not just business hours.
+  - target:
+      kind: ScaledObject
+      name: inference-scaler
+    patch: |
+      - op: remove
+        path: /spec/triggers/1

@@ -1,0 +1,2 @@
+# Dev environment - OpenCost with dev cluster settings
+clusterID: eks-gpu-cluster-dev

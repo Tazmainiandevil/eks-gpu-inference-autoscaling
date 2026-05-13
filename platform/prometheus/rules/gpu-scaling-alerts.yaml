@@ -1,0 +1,151 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: gpu-scaling-alerts
+  namespace: monitoring
+  labels:
+    release: prometheus  # picked up by kube-prometheus-stack ruleSelector
+spec:
+  groups:
+    - name: gpu-inference-scaling
+      interval: 30s
+      rules:
+
+        # ── Queue depth ────────────────────────────────────────────────────────
+
+        - alert: GPUQueueDepthCritical
+          expr: sum(gpu_job_queue_depth) > 25
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "GPU job queue depth critically high ({{ $value }} jobs)"
+            description: >
+              The gpu_job_queue_depth gauge has exceeded 25 for 5 minutes.
+              KEDA should have scaled pods by now — check KEDA operator logs and
+              Karpenter for provisioning failures.
+
+        - alert: GPUQueueNotDraining
+          expr: sum(gpu_job_queue_depth) > 5 and kube_deployment_status_replicas_available{namespace="inference",deployment="inference-pod"} > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "GPU queue not draining despite active replicas"
+            description: >
+              Queue depth has been above threshold for 15 minutes with replicas running.
+              Inference pods may be crashing or stuck. Check pod logs in the inference namespace.
+
+        # ── Pod scheduling ─────────────────────────────────────────────────────
+
+        - alert: GPUPodPendingTooLong
+          expr: |
+            kube_pod_status_phase{namespace="inference", phase="Pending"} == 1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "GPU inference pod {{ $labels.pod }} pending for >10 minutes"
+            description: >
+              A pod in the inference namespace has been Pending for 10 minutes.
+              Either Karpenter failed to provision a node, or the pod cannot be
+              scheduled. Run: kubectl describe pod {{ $labels.pod }} -n inference
+
+        - alert: GPUPodCrashLooping
+          expr: |
+            rate(kube_pod_container_status_restarts_total{namespace="inference"}[5m]) > 0.1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Inference pod {{ $labels.pod }} is crash-looping"
+            description: >
+              Container {{ $labels.container }} in pod {{ $labels.pod }} is restarting
+              more than 6 times per minute. Check logs: kubectl logs {{ $labels.pod }} -n inference
+
+        # ── Karpenter node provisioning ────────────────────────────────────────
+
+        - alert: KarpenterNotProvisioningGPUNodes
+          expr: |
+            (sum(kube_pod_status_phase{namespace="inference", phase="Pending"}) > 0)
+            and
+            (sum(karpenter_nodeclaims_launched_total) == sum(karpenter_nodeclaims_launched_total) offset 5m)
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Karpenter not launching new nodes for pending GPU pods"
+            description: >
+              Pods are Pending in the inference namespace but Karpenter has not launched
+              new NodeClaims in 5 minutes. Check: kubectl describe nodepool gpu
+              and kubectl logs -n karpenter -l app.kubernetes.io/name=karpenter
+
+        - alert: KarpenterNodeClaimFailed
+          expr: karpenter_nodeclaims_terminated_total > 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Karpenter NodeClaim terminated unexpectedly"
+            description: >
+              A Karpenter NodeClaim was terminated. This may indicate spot interruption
+              or a provisioning failure. Check Karpenter events:
+              kubectl get events -n karpenter --field-selector reason=Failed
+
+        # ── GPU resource availability ──────────────────────────────────────────
+
+        - alert: GPUNodeNotReady
+          expr: |
+            kube_node_status_condition{condition="Ready", status="true"}
+            * on(node) group_left()
+            kube_node_labels{label_karpenter_sh_nodepool="gpu"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Karpenter GPU node {{ $labels.node }} not Ready"
+            description: >
+              A GPU node provisioned by Karpenter has been NotReady for 5 minutes.
+              Check the node: kubectl describe node {{ $labels.node }}
+              Common causes: device plugin not starting, IAM role not authorised.
+
+        - alert: GPUCapacityLow
+          expr: |
+            sum(kube_node_status_allocatable{resource="nvidia_com_gpu"}) < 2
+            and sum(gpu_job_queue_depth) > 5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Low GPU capacity with high queue depth"
+            description: >
+              Fewer than 2 GPU units allocatable cluster-wide while queue depth > 5.
+              Karpenter may be at its NodePool GPU limit (nvidia.com/gpu: "8").
+
+        # ── KEDA scaler health ─────────────────────────────────────────────────
+
+        - alert: KEDAScalerError
+          expr: keda_scaler_errors_total > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "KEDA scaler {{ $labels.scaler }} reporting errors"
+            description: >
+              KEDA's {{ $labels.scaler }} scaler is returning errors. If this is the
+              Prometheus scaler, check that Pushgateway is running and Prometheus can
+              reach it: kubectl get pods -n monitoring -l app=prometheus-pushgateway
+
+        # ── Spot interruption ──────────────────────────────────────────────────
+
+        - alert: SpotInterruptionRateHigh
+          expr: rate(karpenter_interruption_received_messages_total[10m]) > 0.1
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High spot interruption rate — consider on-demand fallback"
+            description: >
+              Karpenter is receiving spot interruption notices at >0.1/min.
+              If this persists, GPU workloads will experience frequent disruptions.
+              Consider temporarily switching the GPU NodePool capacity-type to on-demand.

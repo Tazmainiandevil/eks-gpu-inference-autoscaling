@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: platform-quota
+  namespace: platform
+spec:
+  hard:
+    requests.cpu: "8"
+    requests.memory: 16Gi
+    limits.cpu: "16"
+    limits.memory: 32Gi
+    pods: "30"
+    count/pods: "30"
+    requests.nvidia.com/gpu: "4"
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: inference-quota
+  namespace: inference
+spec:
+  hard:
+    requests.cpu: "20"
+    requests.memory: 64Gi
+    limits.cpu: "40"
+    limits.memory: 128Gi
+    pods: "100"
+    requests.nvidia.com/gpu: "20"

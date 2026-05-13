@@ -1,0 +1,21 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: inference-api-pdb
+  namespace: inference
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: inference-api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: gpu-worker-pdb
+  namespace: inference
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      workload: gpu-inference

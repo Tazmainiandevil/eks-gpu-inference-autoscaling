@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: containerd-config-init
+  namespace: dragonfly-system
+  labels:
+    app: containerd-config-init
+spec:
+  selector:
+    matchLabels:
+      app: containerd-config-init
+  template:
+    metadata:
+      labels:
+        app: containerd-config-init
+    spec:
+      tolerations:
+        - operator: Exists
+      initContainers:
+      - name: init-containerd-config
+        image: busybox:1.36.1
+        command:
+        - sh
+        - -c
+        - |
+          REGISTRY="ECR_REGISTRY_PLACEHOLDER"
+          CERTS_DIR="/host/etc/containerd/certs.d/${REGISTRY}"
+          mkdir -p "${CERTS_DIR}"
+          cat > "${CERTS_DIR}/hosts.toml" << EOF
+          server = "https://${REGISTRY}"
+
+          [host."http://127.0.0.1:4001"]
+            capabilities = ["pull", "resolve"]
+          EOF
+          echo "Dragonfly mirror configured for ${REGISTRY} via certs.d"
+        volumeMounts:
+        - name: host-containerd
+          mountPath: /host/etc/containerd
+        securityContext:
+          privileged: true
+      containers:
+      - name: pause
+        image: registry.k8s.io/pause:3.9
+        resources:
+          requests:
+            cpu: 10m
+            memory: 10Mi
+      volumes:
+      - name: host-containerd
+        hostPath:
+          path: /etc/containerd
+          type: DirectoryOrCreate

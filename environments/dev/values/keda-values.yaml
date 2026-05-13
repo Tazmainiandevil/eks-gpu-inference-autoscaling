@@ -1,0 +1,6 @@
+# Development environment overrides for KEDA
+replicaCount: 1
+
+serviceAccount:
+  create: true
+  name: keda-operator

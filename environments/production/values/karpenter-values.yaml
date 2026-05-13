@@ -1,0 +1,17 @@
+# Production environment overrides for Karpenter
+# - HA setup with 2 replicas
+# - ON_DEMAND capacity for reliability
+# - 4 baseline GPU nodes (warm pool for inference)
+# - 2h consolidation window (protect image cache)
+# - Spot interruption handling enabled
+replicaCount: 2
+
+settings:
+  clusterName: YOUR_CLUSTER_NAME-prod
+  # IAM wired via EKS Pod Identity — no serviceAccount annotation needed.
+  # Queue name matches aws_sqs_queue.karpenter_interruption in Terraform: {cluster_name}-spot-interruption
+  interruptionQueue: YOUR_CLUSTER_NAME-prod-spot-interruption
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1  # HA: keep 1 replica always running

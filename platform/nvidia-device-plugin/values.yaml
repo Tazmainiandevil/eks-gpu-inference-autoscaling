@@ -1,0 +1,23 @@
+# NVIDIA GPU Device Plugin with GPU Feature Discovery (GFD)
+# GFD auto-labels GPU nodes with capabilities (memory, product, CUDA version)
+# Enables scheduling based on GPU attributes without DRA
+
+gfd:
+  enabled: true
+
+nodeSelector: {}
+
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+  - key: gpu
+    value: "true"
+    effect: NoSchedule
+
+resources:
+  limits:
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 64Mi

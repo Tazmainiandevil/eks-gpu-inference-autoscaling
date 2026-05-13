@@ -1,0 +1,2 @@
+# Staging environment - OpenCost with staging cluster settings
+clusterID: eks-gpu-cluster-staging

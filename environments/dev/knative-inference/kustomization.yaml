@@ -1,0 +1,43 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Dev overlay for Knative inference — CPU simulation mode.
+#
+# Removes GPU toleration and resource requests so the KService lands on a general
+# Karpenter node instead of a GPU node. Without the gpu toleration the pod cannot
+# schedule on GPU-tainted nodes, so Karpenter provisions a general CPU node.
+# Timeout shortened to match CPU node boot time (~60s vs 360s for GPU cold-start).
+
+resources:
+  - ../../../apps/knative-inference
+
+images:
+  - name: REGISTRY_PLACEHOLDER/inference-stub
+    newName: YOUR_AWS_ACCOUNT_ID.dkr.ecr.YOUR_AWS_REGION.amazonaws.com/inference-stub
+    newTag: latest
+
+patches:
+  - target:
+      kind: Service
+      name: inference-kn
+    patch: |
+      - op: replace
+        path: /spec/template/spec/timeoutSeconds
+        value: 120
+      - op: remove
+        path: /spec/template/spec/tolerations
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi
+      - op: replace
+        path: /spec/template/metadata/annotations/autoscaling.knative.dev~1maxScale
+        value: "3"
+      - op: replace
+        path: /spec/template/metadata/annotations/autoscaling.knative.dev~1scaleDownDelay
+        value: "1m"

@@ -1,0 +1,31 @@
+# Knative Serving — fetched from official GitHub releases.
+# ArgoCD builds this with --load-restrictor LoadRestrictionsNone so kustomize
+# can resolve the https:// release URLs.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: knative-serving
+
+resources:
+  # serving-core.yaml already contains all CRDs — do not add serving-crds.yaml
+  # here as kustomize will reject the duplicate resource IDs.
+  - https://github.com/knative/serving/releases/download/knative-v1.21.1/serving-core.yaml
+
+patches:
+  # Merge into existing ConfigMaps from serving-core.yaml — adding them as
+  # resources would cause duplicate-ID errors.
+  - path: config-deployment.yaml
+    target:
+      kind: ConfigMap
+      name: config-deployment
+      namespace: knative-serving
+  - path: config-network.yaml
+    target:
+      kind: ConfigMap
+      name: config-network
+      namespace: knative-serving
+
+labels:
+  - pairs:
+      app.kubernetes.io/managed-by: argocd
+    includeSelectors: false

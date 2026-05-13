@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Dev overlay for Karpenter NodePool and EC2NodeClass.
+# Patches cluster-specific values to match dev.tfvars (cluster_name = YOUR_CLUSTER_NAME).
+# consolidateAfter inherited from base (3m) — reclaim idle nodes fast enough to
+# save cost while still giving the demo observer time to see scaling events.
+
+resources:
+  - ../../../platform/karpenter
+
+patches:
+  - patch: |-
+      apiVersion: karpenter.k8s.aws/v1
+      kind: EC2NodeClass
+      metadata:
+        name: default
+      spec:
+        role: "YOUR_CLUSTER_NAME-gpu-node-role"
+        subnetSelectorTerms:
+          - tags:
+              karpenter.sh/discovery: YOUR_CLUSTER_NAME
+        securityGroupSelectorTerms:
+          - tags:
+              kubernetes.io/cluster/YOUR_CLUSTER_NAME: owned
+        tags:
+          ManagedBy: karpenter
+          Environment: dev

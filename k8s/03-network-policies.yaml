@@ -1,0 +1,136 @@
+---
+# Default deny all traffic in the inference namespace.
+# Explicit allow policies below open only the required paths.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: inference
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# DNS egress for all pods in inference namespace.
+# Without this, pods cannot resolve any service name and will fail to start.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: inference
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# HTTPS egress for inference pods.
+# Required for: model downloads from S3/HuggingFace Hub, ECR image layer pulls.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-inference-https-egress
+  namespace: inference
+spec:
+  podSelector:
+    matchLabels:
+      app: inference-pod
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 443
+---
+# Pushgateway egress for inference pods.
+# Inference pods write gpu_job_queue_depth metric to Pushgateway,
+# which KEDA reads to drive scaling decisions.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-pushgateway-egress
+  namespace: inference
+spec:
+  podSelector:
+    matchLabels:
+      app: inference-pod
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9091
+---
+# Ingress from Prometheus for metrics scraping (/metrics on port 8000).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scrape-ingress
+  namespace: inference
+spec:
+  podSelector:
+    matchLabels:
+      app: inference-pod
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8000
+---
+# Ingress from nginx Ingress Controller for external API traffic.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-controller
+  namespace: inference
+spec:
+  podSelector:
+    matchLabels:
+      app: inference-pod
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000
+---
+# Prometheus egress to inference namespace for metrics scraping.
+# kube-prometheus-stack sets app.kubernetes.io/name=prometheus on the prometheus pod.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scrape-egress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: inference
+      ports:
+        - protocol: TCP
+          port: 8000

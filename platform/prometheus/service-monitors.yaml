@@ -1,0 +1,40 @@
+---
+# ServiceMonitor for OpenCost — enables node_total_hourly_cost, node_gpu_hourly_cost, etc.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: opencost
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+      - opencost
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: opencost
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+---
+# ServiceMonitor for Karpenter — enables karpenter_build_info, consolidation_timeouts, etc.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: karpenter
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+      - karpenter
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: karpenter
+  endpoints:
+    - port: http-metrics
+      path: /metrics
+      interval: 30s
